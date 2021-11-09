@@ -1,7 +1,4 @@
-use driver::Driver;
-use point::Point;
-use port_buffer::PortBuffer;
-use section_collector::SectionCollector;
+use driver::{Driver, MultipleDeviceDriver};
 use serial_port::{Port, PortKey, SerialPort};
 use std::time::{Duration, Instant};
 
@@ -13,12 +10,26 @@ mod point;
 mod port_buffer;
 mod section_collector;
 
+use port_buffer::PortBuffer;
+use section_collector::SectionCollector;
+
+pub use point::Point;
+
+pub extern crate driver;
+
 pub struct LD19 {
     port: Port,
     buffer: PortBuffer<47>,
     last_time: Instant,
     section: SectionCollector,
     filter: fn(Point) -> bool,
+}
+
+impl MultipleDeviceDriver for LD19 {
+    type Command = fn(Point) -> bool;
+    fn send(&mut self, command: Self::Command) {
+        self.filter = command;
+    }
 }
 
 impl Driver for LD19 {
