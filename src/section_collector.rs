@@ -1,4 +1,4 @@
-use crate::point::Point;
+use crate::Point;
 
 pub(super) struct SectionCollector {
     dir_each: u16,
@@ -8,7 +8,7 @@ pub(super) struct SectionCollector {
 
 impl SectionCollector {
     pub fn new(len: u8) -> Self {
-        let dir_each = 36000 / len as u16;
+        let dir_each = crate::MAX_DIR / len as u16;
         Self {
             dir_each,
             current: 0,

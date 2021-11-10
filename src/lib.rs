@@ -2,24 +2,30 @@ use driver::{Driver, MultipleDeviceDriver};
 use serial_port::{Port, PortKey, SerialPort};
 use std::time::{Duration, Instant};
 
-const POINT_RECEIVE_TIMEOUT: Duration = Duration::from_millis(200);
-const POINT_PARSE_TIMEOUT: Duration = Duration::from_millis(250);
-const OPEN_TIMEOUT: Duration = Duration::from_secs(3);
+pub extern crate driver;
 
-mod point;
 mod port_buffer;
 mod section_collector;
 
 use port_buffer::PortBuffer;
 use section_collector::SectionCollector;
 
-pub use point::Point;
+const POINT_RECEIVE_TIMEOUT: Duration = Duration::from_millis(200);
+const POINT_PARSE_TIMEOUT: Duration = Duration::from_millis(250);
+const OPEN_TIMEOUT: Duration = Duration::from_secs(3);
 
-pub extern crate driver;
+#[derive(Clone, Copy, Debug)]
+pub struct Point {
+    pub len: u16,
+    pub dir: u16,
+    pub rely: u8,
+}
+
+pub const MAX_DIR: u16 = 36000;
 
 pub struct LD19 {
     port: Port,
-    buffer: PortBuffer<47>,
+    buffer: PortBuffer,
     last_time: Instant,
     section: SectionCollector,
     filter: fn(Point) -> bool,

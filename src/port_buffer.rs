@@ -1,51 +1,52 @@
-use crate::point::Point;
+use crate::Point;
 
-use super::point::Points;
+mod data;
 
-pub struct PortBuffer<const LEN: usize> {
+use data::Package;
+
+const LEN: usize = std::mem::size_of::<Package>();
+
+pub struct PortBuffer {
     buffer: [u8; LEN],
-    cursor_r: usize,
-    cursor_w: usize,
+    cursor: usize,
 }
 
-impl<const LEN: usize> Default for PortBuffer<LEN> {
+impl Default for PortBuffer {
     fn default() -> Self {
         Self {
             buffer: [0u8; LEN],
-            cursor_r: 0,
-            cursor_w: 0,
+            cursor: 0,
         }
     }
 }
 
-impl<const LEN: usize> PortBuffer<LEN> {
+impl PortBuffer {
     pub fn as_buf<'a>(&'a mut self) -> &'a mut [u8] {
-        &mut self.buffer[self.cursor_w..]
+        &mut self.buffer[self.cursor..]
     }
+
     pub fn notify_recived<'a>(&'a mut self, n: usize) {
-        self.cursor_w += n;
+        self.cursor += n;
     }
 }
 
-impl<const LEN: usize> Iterator for PortBuffer<LEN> {
+impl Iterator for PortBuffer {
     type Item = Vec<Point>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let slice = &self.buffer[self.cursor_r..self.cursor_w];
-            if slice.len() >= LEN {
-                if let Some(p) = Points::decode(slice) {
-                    self.cursor_r += LEN;
-                    return Some(p);
-                } else {
-                    self.cursor_r += 1;
-                }
+        if self.cursor == LEN {
+            self.cursor = 0;
+            if let Some(vec) = Package::decode(&self.buffer) {
+                Some(vec)
+            } else if let Some(n) = Package::search_head(&self.buffer[1..]) {
+                self.buffer.copy_within(n + 1.., 0);
+                self.cursor = LEN - n - 1;
+                None
             } else {
-                self.buffer.copy_within(self.cursor_r..self.cursor_w, 0);
-                self.cursor_w -= self.cursor_r;
-                self.cursor_r = 0;
-                return None;
+                None
             }
+        } else {
+            None
         }
     }
 }
