@@ -36,26 +36,25 @@ impl PortBuffer {
 impl Iterator for PortBuffer {
     type Item = Point;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.points.len() == 0 {
-            if self.cursor == LEN {
-                self.cursor = 0;
-                if let Some(vec) = Package::decode(&self.buffer, 0x99) {
-                    for p in vec {
-                        self.points.push_back(p);
-                    }
-                    self.points.pop_front()
-                } else if let Some(n) = Package::search_head(&self.buffer[1..]) {
-                    self.buffer.copy_within(n + 1.., 0);
-                    self.cursor = LEN - n - 1;
-                    None
-                } else {
-                    None
+        if let Some(p) = self.points.pop_front() {
+            Some(p)
+        } else if self.cursor == LEN {
+            self.cursor = 0;
+            if Package::decode(&self.buffer, |p, r| {
+                if r > 120 {
+                    self.points.push_back(p);
                 }
+            }) {
+                self.points.pop_front()
+            } else if let Some(n) = Package::search_head(&self.buffer[1..]) {
+                self.buffer.copy_within(n + 1.., 0);
+                self.cursor = LEN - n - 1;
+                None
             } else {
                 None
             }
         } else {
-            self.points.pop_front()
+            None
         }
     }
 }

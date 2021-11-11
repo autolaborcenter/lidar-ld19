@@ -16,39 +16,52 @@ const HEAD: u8 = 0x54;
 const LEN: u8 = 12;
 
 impl Package {
-    pub fn decode(buf: &[u8], min_relay: u8) -> Option<Vec<Point>> {
+    pub fn decode<F>(buf: &[u8], mut f: F) -> bool
+    where
+        F: FnMut(Point, u8) -> (),
+    {
         Some(unsafe { &*(buf.as_ptr() as *const Self) })
             .filter(|points| {
                 points.head == HEAD
-                    && points.len == LEN
+                    && points.len & 0x1F == LEN
                     && points.crc == cal_crc8(&buf[..buf.len() - 1])
             })
             .map(|p| {
                 let each_angle = p.each_angle();
-                p.data
-                    .iter()
-                    .filter(|p| p[2] > min_relay)
-                    .fold((p.angle_s, vec![]), |(dir, mut vec), f| {
-                        vec.push(Point {
-                            len: unsafe { *(f.as_ptr() as *const u16) },
+                p.data.iter().fold(p.angle_s, |mut dir, p| {
+                    f(
+                        Point {
+                            len: unsafe { *(p.as_ptr() as *const u16) },
                             dir,
-                        });
-                        (dir + each_angle, vec)
-                    })
-                    .1
+                        },
+                        p[2],
+                    );
+                    dir += each_angle;
+                    if dir >= 36000 {
+                        dir - 36000
+                    } else {
+                        dir
+                    }
+                })
             })
+            .is_some()
     }
 
     pub fn search_head(buf: &[u8]) -> Option<usize> {
         buf.windows(2)
             .enumerate()
-            .find(|(_, pair)| pair[0] == HEAD && pair[1] == LEN)
+            .find(|(_, pair)| pair[0] == HEAD && pair[1] & 0x1F == LEN)
             .map(|(i, _)| i)
     }
 
     #[inline]
     fn each_angle(&self) -> u16 {
-        ((self.angle_e - self.angle_s) as f32 / ((self.len & 0x1F) - 1) as f32).round() as u16
+        let diff = if self.angle_e < self.angle_s {
+            self.angle_e + crate::CONFIG.dir_round - self.angle_s
+        } else {
+            self.angle_e - self.angle_s
+        };
+        (diff as f32 / ((self.len & 0x1F) - 1) as f32).round() as u16
     }
 }
 
