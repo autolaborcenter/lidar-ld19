@@ -28,7 +28,7 @@ impl PortBuffer {
         &mut self.buffer[self.cursor..]
     }
 
-    pub fn notify_recived<'a>(&'a mut self, n: usize) {
+    pub fn notify_received<'a>(&'a mut self, n: usize) {
         self.cursor += n;
     }
 }
