@@ -1,50 +1,41 @@
-use lidar::Point;
-
 #[repr(C, packed)]
 pub(super) struct Package {
-    head: u8,                      // 起始符
-    len: u8,                       // 数据长度
-    w: u16,                        // 雷达转速 °/s
-    angle_s: u16,                  // 起始角度
-    data: [[u8; 3]; LEN as usize], // 数据: (距离: u16, 置信度: u8) x 12
-    angle_e: u16,                  // 结束角度
-    time: u16,                     // 时间戳 [0, 30000) ms
-    crc: u8,                       // CRC 校验
+    head: u8,                    // 起始符
+    len: u8,                     // 数据长度
+    w: u16,                      // 雷达转速 °/s
+    angle_s: u16,                // 起始角度
+    data: [Point; LEN as usize], // 数据: (距离: u16, 置信度: u8) x 12
+    angle_e: u16,                // 结束角度
+    time: u16,                   // 时间戳 [0, 30000) ms
+    crc: u8,                     // CRC 校验
 }
+
+pub(super) struct Points<'a> {
+    slice: &'a [Point],
+    angle: u16,
+    angle_each: u16,
+    min_confidence: u8,
+}
+
+struct Point([u8; 3]);
 
 const HEAD: u8 = 0x54;
 const LEN: u8 = 12;
 
 impl Package {
-    pub fn decode<F>(buf: &[u8], mut f: F) -> bool
-    where
-        F: FnMut(Point, u8) -> (),
-    {
+    pub fn decode<'a>(buf: &'a [u8], min_confidence: u8) -> Option<Points<'a>> {
         Some(unsafe { &*(buf.as_ptr() as *const Self) })
             .filter(|points| {
                 points.head == HEAD
                     && points.len & 0x1F == LEN
                     && points.crc == cal_crc8(&buf[..buf.len() - 1])
             })
-            .map(|p| {
-                let each_angle = p.each_angle();
-                p.data.iter().fold(p.angle_s, |mut dir, p| {
-                    f(
-                        Point {
-                            len: unsafe { *(p.as_ptr() as *const u16) },
-                            dir,
-                        },
-                        p[2],
-                    );
-                    dir += each_angle;
-                    if dir >= 36000 {
-                        dir - 36000
-                    } else {
-                        dir
-                    }
-                })
+            .map(|package| Points {
+                slice: &package.data,
+                angle: package.angle_s,
+                angle_each: package.angle_each(),
+                min_confidence,
             })
-            .is_some()
     }
 
     pub fn search_head(buf: &[u8]) -> Option<usize> {
@@ -55,13 +46,50 @@ impl Package {
     }
 
     #[inline]
-    fn each_angle(&self) -> u16 {
+    fn angle_each(&self) -> u16 {
         let diff = if self.angle_e < self.angle_s {
             self.angle_e + crate::CONFIG.dir_round - self.angle_s
         } else {
             self.angle_e - self.angle_s
         };
         (diff as f32 / ((self.len & 0x1F) - 1) as f32).round() as u16
+    }
+}
+
+impl Point {
+    #[inline]
+    fn len(&self) -> u16 {
+        unsafe { *(self.0.as_ptr() as *const u16) }
+    }
+
+    #[inline]
+    fn confidence(&self) -> u8 {
+        self.0[2]
+    }
+}
+
+impl Iterator for Points<'_> {
+    type Item = crate::Point;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.slice {
+            [p, ..] => {
+                if self.angle >= crate::CONFIG.dir_round {
+                    self.angle -= crate::CONFIG.dir_round;
+                }
+                let dir = self.angle;
+                self.angle += self.angle_each;
+                Some(crate::Point {
+                    len: if p.confidence() < self.min_confidence {
+                        0
+                    } else {
+                        p.len()
+                    },
+                    dir,
+                })
+            }
+            [] => None,
+        }
     }
 }
 

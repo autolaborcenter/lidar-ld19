@@ -22,6 +22,12 @@ pub struct LD19 {
     buffer: PortBuffer,
 }
 
+impl LD19 {
+    pub fn min_confidence<'a>(&'a mut self) -> &'a mut u8 {
+        &mut self.buffer.min_confidence
+    }
+}
+
 impl LidarDriver for LD19 {
     type Key = PortKey;
 

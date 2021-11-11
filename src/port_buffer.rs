@@ -11,6 +11,7 @@ pub struct PortBuffer {
     buffer: [u8; LEN],
     cursor: usize,
     points: VecDeque<Point>,
+    pub min_confidence: u8,
 }
 
 impl Default for PortBuffer {
@@ -19,6 +20,7 @@ impl Default for PortBuffer {
             buffer: [0u8; LEN],
             cursor: 0,
             points: VecDeque::new(),
+            min_confidence: 0,
         }
     }
 }
@@ -40,12 +42,10 @@ impl Iterator for PortBuffer {
             Some(p)
         } else if self.cursor == LEN {
             self.cursor = 0;
-            if Package::decode(&self.buffer, |p, r| {
-                if r > 120 {
-                    self.points.push_back(p);
-                }
-            }) {
-                self.points.pop_front()
+            if let Some(mut points) = Package::decode(&self.buffer, self.min_confidence) {
+                let result = points.next();
+                self.points.extend(points);
+                result
             } else if let Some(n) = Package::search_head(&self.buffer[1..]) {
                 self.buffer.copy_within(n + 1.., 0);
                 self.cursor = LEN - n - 1;
