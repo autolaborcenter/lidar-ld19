@@ -1,47 +1,23 @@
-use driver::{Driver, MultipleDeviceDriver};
+use lidar::LidarDriver;
 use serial_port::{Port, PortKey, SerialPort};
-use std::time::{Duration, Instant};
-
-pub extern crate driver;
+use std::time::Duration;
 
 mod port_buffer;
-mod section_collector;
-
 use port_buffer::PortBuffer;
-use section_collector::SectionCollector;
 
 const POINT_RECEIVE_TIMEOUT: Duration = Duration::from_millis(200);
 const POINT_PARSE_TIMEOUT: Duration = Duration::from_millis(250);
-const OPEN_TIMEOUT: Duration = Duration::from_secs(3);
-
-#[derive(Clone, Copy, Debug)]
-pub struct Point {
-    pub len: u16,
-    pub dir: u16,
-    pub rely: u8,
-}
+const OPEN_TIMEOUT: Duration = Duration::from_secs(1);
 
 pub const MAX_DIR: u16 = 36000;
 
 pub struct LD19 {
     port: Port,
     buffer: PortBuffer,
-    last_time: Instant,
-    section: SectionCollector,
-    filter: fn(Point) -> bool,
 }
 
-impl MultipleDeviceDriver for LD19 {
-    type Command = fn(Point) -> bool;
-    fn send(&mut self, command: Self::Command) {
-        self.filter = command;
-    }
-}
-
-impl Driver for LD19 {
-    type Pacemaker = ();
+impl LidarDriver for LD19 {
     type Key = PortKey;
-    type Event = (u8, Vec<Point>);
 
     fn keys() -> Vec<Self::Key> {
         Port::list().into_iter().map(|id| id.key).collect()
@@ -51,54 +27,40 @@ impl Driver for LD19 {
         OPEN_TIMEOUT
     }
 
-    fn new(key: &Self::Key) -> Option<(Self::Pacemaker, Self)> {
-        match Port::open(key, 230400, POINT_RECEIVE_TIMEOUT.as_millis() as u32) {
-            Ok(port) => {
-                println!("PortOpen!");
-                Some((
-                    (),
-                    LD19 {
-                        port,
-                        buffer: Default::default(),
-                        last_time: Instant::now(),
-                        section: SectionCollector::new(8),
-                        filter: |_| true,
-                    },
-                ))
-            }
-            Err(_) => None,
+    fn parse_timeout() -> Duration {
+        POINT_PARSE_TIMEOUT
+    }
+
+    fn max_dir() -> u16 {
+        MAX_DIR
+    }
+
+    fn new(key: &Self::Key) -> Option<Self> {
+        if let Ok(port) = Port::open(key, 230400, POINT_RECEIVE_TIMEOUT.as_millis() as u32) {
+            Some(LD19 {
+                port,
+                buffer: Default::default(),
+            })
+        } else {
+            None
         }
     }
 
-    fn join<F>(&mut self, mut f: F) -> bool
-    where
-        F: FnMut(&mut Self, Option<(Instant, Self::Event)>) -> bool,
-    {
-        let mut time = Instant::now();
-        loop {
-            if let Some(v) = self.buffer.next() {
-                time = self.last_time;
-                let v = v.into_iter().filter(|p| (self.filter)(*p)).collect();
-                if let Some(section) = self.section.push(v) {
-                    if !f(self, Some((time, section))) {
-                        return true;
-                    }
-                }
-            } else if self.last_time > time + POINT_PARSE_TIMEOUT {
-                return false;
-            } else {
-                match self.port.read(self.buffer.as_buf()) {
-                    Some(n) => {
-                        if n == 0 {
-                            return false;
-                        } else {
-                            self.last_time = Instant::now();
-                            self.buffer.notify_recived(n);
-                        }
-                    }
-                    None => return false,
+    fn receive(&mut self) -> bool {
+        match self.port.read(self.buffer.as_buf()) {
+            Some(n) => {
+                if n == 0 {
+                    return false;
+                } else {
+                    self.buffer.notify_recived(n);
                 }
             }
+            None => return false,
         }
+        true
+    }
+
+    fn parse(&mut self) -> Option<lidar::Point> {
+        self.buffer.next()
     }
 }

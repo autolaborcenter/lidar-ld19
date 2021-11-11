@@ -407,10 +407,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fbe5e23404da5b4f555ef85ebed98fb4083e55a00c317800bc2a50ede9f3d219"
 
 [[package]]
-name = "lidar-ld19"
+name = "lidar"
 version = "0.1.0"
 dependencies = [
  "driver",
+]
+
+[[package]]
+name = "lidar-ld19"
+version = "0.1.0"
+dependencies = [
+ "lidar",
  "serial-port",
 ]
 

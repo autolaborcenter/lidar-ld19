@@ -6,5 +6,5 @@ authors = ["12345qiupeng <>"]
 readme = "README.md"
 
 [dependencies]
-driver = { path = "../driver" }
+lidar = { path = "../lidar" }
 serial-port = { path = "../serial-port" }

@@ -1,4 +1,4 @@
-use crate::Point;
+use lidar::Point;
 
 #[repr(C, packed)]
 pub(super) struct Package {
@@ -16,7 +16,7 @@ const HEAD: u8 = 0x54;
 const LEN: u8 = 12;
 
 impl Package {
-    pub fn decode(buf: &[u8]) -> Option<Vec<Point>> {
+    pub fn decode(buf: &[u8], min_relay: u8) -> Option<Vec<Point>> {
         Some(unsafe { &*(buf.as_ptr() as *const Self) })
             .filter(|points| {
                 points.head == HEAD
@@ -27,11 +27,11 @@ impl Package {
                 let each_angle = p.each_angle();
                 p.data
                     .iter()
+                    .filter(|p| p[2] > min_relay)
                     .fold((p.angle_s, vec![]), |(dir, mut vec), f| {
                         vec.push(Point {
                             len: unsafe { *(f.as_ptr() as *const u16) },
                             dir,
-                            rely: f[2],
                         });
                         (dir + each_angle, vec)
                     })
