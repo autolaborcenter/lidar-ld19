@@ -1,51 +1,61 @@
-use crate::point::Point;
+mod data;
 
-use super::point::Points;
+use std::collections::VecDeque;
 
-pub struct PortBuffer<const LEN: usize> {
+use data::Package;
+use lidar::Point;
+
+const LEN: usize = std::mem::size_of::<Package>();
+
+pub struct PortBuffer {
     buffer: [u8; LEN],
-    cursor_r: usize,
-    cursor_w: usize,
+    cursor: usize,
+    points: VecDeque<Point>,
 }
 
-impl<const LEN: usize> Default for PortBuffer<LEN> {
+impl Default for PortBuffer {
     fn default() -> Self {
         Self {
             buffer: [0u8; LEN],
-            cursor_r: 0,
-            cursor_w: 0,
+            cursor: 0,
+            points: VecDeque::new(),
         }
     }
 }
 
-impl<const LEN: usize> PortBuffer<LEN> {
+impl PortBuffer {
     pub fn as_buf<'a>(&'a mut self) -> &'a mut [u8] {
-        &mut self.buffer[self.cursor_w..]
+        &mut self.buffer[self.cursor..]
     }
-    pub fn notify_recived<'a>(&'a mut self, n: usize) {
-        self.cursor_w += n;
+
+    pub fn notify_received<'a>(&'a mut self, n: usize) {
+        self.cursor += n;
     }
 }
 
-impl<const LEN: usize> Iterator for PortBuffer<LEN> {
-    type Item = Vec<Point>;
-
+impl Iterator for PortBuffer {
+    type Item = Point;
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let slice = &self.buffer[self.cursor_r..self.cursor_w];
-            if slice.len() >= LEN {
-                if let Some(p) = Points::decode(slice) {
-                    self.cursor_r += LEN;
-                    return Some(p);
+        if self.points.len() == 0 {
+            if self.cursor == LEN {
+                self.cursor = 0;
+                if let Some(vec) = Package::decode(&self.buffer, 0x99) {
+                    for p in vec {
+                        self.points.push_back(p);
+                    }
+                    self.points.pop_front()
+                } else if let Some(n) = Package::search_head(&self.buffer[1..]) {
+                    self.buffer.copy_within(n + 1.., 0);
+                    self.cursor = LEN - n - 1;
+                    None
                 } else {
-                    self.cursor_r += 1;
+                    None
                 }
             } else {
-                self.buffer.copy_within(self.cursor_r..self.cursor_w, 0);
-                self.cursor_w -= self.cursor_r;
-                self.cursor_r = 0;
-                return None;
+                None
             }
+        } else {
+            self.points.pop_front()
         }
     }
 }

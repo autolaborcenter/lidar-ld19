@@ -1,41 +1,29 @@
-use driver::{Driver, MultipleDeviceDriver};
 use serial_port::{Port, PortKey, SerialPort};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-const POINT_RECEIVE_TIMEOUT: Duration = Duration::from_millis(200);
-const POINT_PARSE_TIMEOUT: Duration = Duration::from_millis(250);
-const OPEN_TIMEOUT: Duration = Duration::from_secs(3);
-
-mod point;
 mod port_buffer;
-mod section_collector;
 
 use port_buffer::PortBuffer;
-use section_collector::SectionCollector;
 
-pub use point::Point;
+pub use lidar::{driver, Config, Lidar, LidarDriver, Point};
 
-pub extern crate driver;
+const POINT_RECEIVE_TIMEOUT: Duration = Duration::from_millis(200);
+const OPEN_TIMEOUT: Duration = Duration::from_secs(1);
+const POINT_PARSE_TIMEOUT: Duration = Duration::from_millis(250);
+
+pub const CONFIG: Config = Config {
+    len_meter: 1000,
+    dir_round: 36000,
+    zipped_size: 4,
+};
 
 pub struct LD19 {
     port: Port,
-    buffer: PortBuffer<47>,
-    last_time: Instant,
-    section: SectionCollector,
-    filter: fn(Point) -> bool,
+    buffer: PortBuffer,
 }
 
-impl MultipleDeviceDriver for LD19 {
-    type Command = fn(Point) -> bool;
-    fn send(&mut self, command: Self::Command) {
-        self.filter = command;
-    }
-}
-
-impl Driver for LD19 {
-    type Pacemaker = ();
+impl LidarDriver for LD19 {
     type Key = PortKey;
-    type Event = (u8, Vec<Point>);
 
     fn keys() -> Vec<Self::Key> {
         Port::list().into_iter().map(|id| id.key).collect()
@@ -45,54 +33,74 @@ impl Driver for LD19 {
         OPEN_TIMEOUT
     }
 
-    fn new(key: &Self::Key) -> Option<(Self::Pacemaker, Self)> {
-        match Port::open(key, 230400, POINT_RECEIVE_TIMEOUT.as_millis() as u32) {
-            Ok(port) => {
-                println!("PortOpen!");
-                Some((
-                    (),
-                    LD19 {
-                        port,
-                        buffer: Default::default(),
-                        last_time: Instant::now(),
-                        section: SectionCollector::new(8),
-                        filter: |_| true,
-                    },
-                ))
-            }
-            Err(_) => None,
-        }
+    fn parse_timeout() -> Duration {
+        POINT_PARSE_TIMEOUT
     }
 
-    fn join<F>(&mut self, mut f: F) -> bool
-    where
-        F: FnMut(&mut Self, Option<(Instant, Self::Event)>) -> bool,
-    {
-        let mut time = Instant::now();
-        loop {
-            if let Some(v) = self.buffer.next() {
-                time = self.last_time;
-                let v = v.into_iter().filter(|p| (self.filter)(*p)).collect();
-                if let Some(section) = self.section.push(v) {
-                    if !f(self, Some((time, section))) {
-                        return true;
-                    }
-                }
-            } else if self.last_time > time + POINT_PARSE_TIMEOUT {
-                return false;
-            } else {
-                match self.port.read(self.buffer.as_buf()) {
-                    Some(n) => {
-                        if n == 0 {
-                            return false;
-                        } else {
-                            self.last_time = Instant::now();
-                            self.buffer.notify_recived(n);
-                        }
-                    }
-                    None => return false,
-                }
-            }
-        }
+    fn max_dir() -> u16 {
+        CONFIG.dir_round
     }
+
+    fn new(key: &Self::Key) -> Option<Self> {
+        Port::open(key, 230400, POINT_RECEIVE_TIMEOUT.as_millis() as u32)
+            .ok()
+            .map(|port| Self {
+                port,
+                buffer: Default::default(),
+            })
+    }
+
+    fn receive(&mut self) -> bool {
+        self.port
+            .read(self.buffer.as_buf())
+            .filter(|n| *n > 0)
+            .map(|n| self.buffer.notify_received(n))
+            .is_some()
+    }
+
+    fn parse(&mut self) -> Option<lidar::Point> {
+        self.buffer.next()
+    }
+}
+
+#[inline]
+pub const fn zip(p: Point) -> [u8; CONFIG.zipped_size] {
+    [
+        (p.len >> 8) as u8,
+        p.len as u8,
+        (p.dir >> 8) as u8,
+        p.dir as u8,
+    ]
+}
+
+#[inline]
+pub const unsafe fn unzip(buf: &[u8]) -> Point {
+    Point {
+        len: ((buf[0] as u16) << 8) | buf[1] as u16,
+        dir: ((buf[2] as u16) << 8) | buf[3] as u16,
+    }
+}
+
+#[test]
+fn assert_assign() {
+    // 随便的一组值
+    const P0: Point = Point {
+        len: 999,
+        dir: 7777,
+    };
+    unsafe { assert_eq!(unzip(&zip(P0)), P0) };
+
+    // 设备可能的最大值
+    const P1: Point = Point {
+        len: 12000,
+        dir: 35999,
+    };
+    unsafe { assert_eq!(unzip(&zip(P1)), P1) };
+
+    // 数据结构支持的最大值
+    const P2: Point = Point {
+        len: 65535,
+        dir: 65535,
+    };
+    unsafe { assert_eq!(unzip(&zip(P2)), P2) };
 }

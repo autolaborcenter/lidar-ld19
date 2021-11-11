@@ -2,9 +2,9 @@
 name = "lidar-ld19"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["12345qiupeng <>"]
+readme = "README.md"
 
 [dependencies]
-driver = { path = "../driver" }
+lidar = { path = "../lidar" }
 serial-port = { path = "../serial-port" }
