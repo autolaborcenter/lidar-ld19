@@ -23,13 +23,17 @@ const HEAD: u8 = 0x54;
 const LEN: u8 = 12;
 
 impl Package {
+    /// 解码
     pub fn decode<'a>(buf: &'a [u8], min_confidence: u8) -> Option<Points<'a>> {
+        // 转换
         Some(unsafe { &*(buf.as_ptr() as *const Self) })
+            // 校验
             .filter(|points| {
                 points.head == HEAD
                     && points.len & 0x1F == LEN
                     && points.crc == cal_crc8(&buf[..buf.len() - 1])
             })
+            // 使用引用构造迭代器
             .map(|package| Points {
                 slice: &package.data,
                 angle: package.angle_s,
@@ -38,6 +42,7 @@ impl Package {
             })
     }
 
+    /// 查找一个包头
     pub fn search_head(buf: &[u8]) -> Option<usize> {
         buf.windows(2)
             .enumerate()
@@ -45,6 +50,7 @@ impl Package {
             .map(|(i, _)| i)
     }
 
+    /// 插值
     #[inline]
     fn angle_each(&self) -> u16 {
         let diff = if self.angle_e < self.angle_s {
@@ -73,12 +79,14 @@ impl Iterator for Points<'_> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.slice {
-            [p, ..] => {
+            [] => None,
+            [p, rest @ ..] => {
                 if self.angle >= crate::CONFIG.dir_round {
                     self.angle -= crate::CONFIG.dir_round;
                 }
                 let dir = self.angle;
                 self.angle += self.angle_each;
+                self.slice = rest;
                 Some(crate::Point {
                     len: if p.confidence() < self.min_confidence {
                         0
@@ -88,7 +96,6 @@ impl Iterator for Points<'_> {
                     dir,
                 })
             }
-            [] => None,
         }
     }
 }
