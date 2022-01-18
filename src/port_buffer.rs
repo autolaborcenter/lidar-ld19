@@ -26,11 +26,11 @@ impl Default for PortBuffer {
 }
 
 impl PortBuffer {
-    pub fn as_buf<'a>(&'a mut self) -> &'a mut [u8] {
+    pub fn as_buf(&mut self) -> &mut [u8] {
         &mut self.buffer[self.cursor..]
     }
 
-    pub fn notify_received<'a>(&'a mut self, n: usize) {
+    pub fn notify_received(&mut self, n: usize) {
         self.cursor += n;
     }
 }

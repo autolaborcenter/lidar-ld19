@@ -21,7 +21,7 @@ fn main() {
                 println!("{}/{}", current, target);
                 *next_try = Instant::now() + Duration::from_secs(1);
             }
-            Event(k, Some((_, (_, _))), _) => if let Some(_) = indexer.find(&k) {},
+            Event(k, Some((_, (_, _))), _) => if indexer.find(&k).is_some() {},
             Event(_, _, _) => {}
             Disconnected(k) => {
                 println!("disconnected: COM{}", &k);

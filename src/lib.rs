@@ -23,7 +23,8 @@ pub struct LD19 {
 }
 
 impl LD19 {
-    pub fn min_confidence<'a>(&'a mut self) -> &'a mut u8 {
+    #[inline]
+    pub fn min_confidence_mut(&mut self) -> &mut u8 {
         &mut self.buffer.min_confidence
     }
 }
@@ -31,18 +32,22 @@ impl LD19 {
 impl LidarDriver for LD19 {
     type Key = PortKey;
 
+    #[inline]
     fn keys() -> Vec<Self::Key> {
         Port::list().into_iter().map(|id| id.key).collect()
     }
 
+    #[inline]
     fn open_timeout() -> Duration {
         OPEN_TIMEOUT
     }
 
+    #[inline]
     fn parse_timeout() -> Duration {
         POINT_PARSE_TIMEOUT
     }
 
+    #[inline]
     fn max_dir() -> u16 {
         CONFIG.dir_round
     }
@@ -64,6 +69,7 @@ impl LidarDriver for LD19 {
             .is_some()
     }
 
+    #[inline]
     fn parse(&mut self) -> Option<lidar::Point> {
         self.buffer.next()
     }
@@ -80,6 +86,11 @@ pub const fn zip(p: Point) -> [u8; CONFIG.zipped_size] {
 }
 
 #[inline]
+/// 从字节数组解压一个点
+///
+/// # Safety
+///
+/// 字节数组长度不能小于 4
 pub const unsafe fn unzip(buf: &[u8]) -> Point {
     Point {
         len: ((buf[0] as u16) << 8) | buf[1] as u16,

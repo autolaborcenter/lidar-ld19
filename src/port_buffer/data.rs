@@ -24,7 +24,7 @@ const LEN: u8 = 12;
 
 impl Package {
     /// 解码
-    pub fn decode<'a>(buf: &'a [u8], min_confidence: u8) -> Option<Points<'a>> {
+    pub fn decode(buf: &[u8], min_confidence: u8) -> Option<Points<'_>> {
         // 转换
         Some(unsafe { &*(buf.as_ptr() as *const Self) })
             // 校验
