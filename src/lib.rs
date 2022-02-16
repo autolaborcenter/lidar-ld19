@@ -53,12 +53,16 @@ impl LidarDriver for LD19 {
     }
 
     fn new(key: &Self::Key) -> Option<Self> {
-        Port::open(key, 230400, POINT_RECEIVE_TIMEOUT.as_millis() as u32)
-            .ok()
-            .map(|port| Self {
+        match Port::open(key, 230400, POINT_RECEIVE_TIMEOUT.as_millis() as u32) {
+            Ok(port) => Some(Self {
                 port,
                 buffer: Default::default(),
-            })
+            }),
+            Err(e) => {
+                log::error!(target:"lidar-ld19", "failed to open ld19: {e:?}");
+                None
+            }
+        }
     }
 
     fn receive(&mut self) -> bool {

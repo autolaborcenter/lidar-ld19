@@ -1,6 +1,6 @@
 [package]
 name = "lidar-ld19"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 authors = ["12345qiupeng <>", "YdrMaster <ydrml@hotmail.com>"]
 readme = "README.md"
@@ -8,3 +8,4 @@ readme = "README.md"
 [dependencies]
 lidar = { path = "../lidar" }
 serial-port = { path = "../serial-port" }
+log = "*"
